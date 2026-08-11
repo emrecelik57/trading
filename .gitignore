@@ -8,11 +8,20 @@ venv/
 .pytest_cache/
 .ipynb_checkpoints/
 
-# Donnees et sorties locales (ne pas versionner)
+# Donnees brutes et artefacts recalculables : jamais versionnes.
 data/cache/
 data/prices/
-state/
-output/
 models/
-config/config.yaml
 *.joblib
+
+# Sorties du backtest : volumineuses et reproductibles.
+output/*
+# ... sauf les ordres quotidiens, qui constituent le journal de la routine.
+!output/orders_*.json
+
+# L'etat du portefeuille EST versionne : la routine quotidienne tourne dans un
+# conteneur ephemere reconstruit a chaque execution. Sans cela, elle ne saurait
+# pas ce que vous detenez et proposerait chaque matin d'acheter tout un
+# portefeuille en partant de zero.
+# Idem pour la configuration : elle porte votre univers et votre capital.
+# Attention : n'y ecrivez jamais de cle d'API en clair.
