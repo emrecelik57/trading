@@ -1,0 +1,127 @@
+"""Modele de fichier de configuration genere par `quantfolio init`."""
+
+DEFAULT_CONFIG_YAML = """\
+# Configuration quantfolio
+# Toutes les valeurs ci-dessous ont un defaut raisonnable : commentez une ligne
+# pour revenir au defaut du code.
+
+universe:
+  # Les titres que l'outil a le droit d'acheter.
+  # Un univers trop petit (< 15 titres) rend le classement peu significatif.
+  tickers:
+    - AAPL
+    - MSFT
+    - NVDA
+    - AMZN
+    - GOOGL
+    - META
+    - JPM
+    - V
+    - UNH
+    - XOM
+    - JNJ
+    - PG
+    - HD
+    - KO
+    - PEP
+    - CVX
+    - MRK
+    - ABBV
+    - AVGO
+    - COST
+  # Sert au filtre de regime et a la comparaison de performance.
+  # Laisser vide pour utiliser un indice equipondere de l'univers.
+  benchmark: SPY
+
+data:
+  # csv | yahoo | synthetic | custom
+  #   csv       : fichiers <path>/<TICKER>.csv (colonnes date + cloture ajustee)
+  #   yahoo     : API publique Yahoo Finance, sans dependance (depannage)
+  #   synthetic : donnees simulees, pour tester l'outil sans reseau
+  #   custom    : votre propre API (voir README, section "Brancher votre API")
+  provider: yahoo
+  path: data/prices
+  # custom: "mon_module:MonProvider"
+  # provider_args:
+  #   api_key: "..."
+  start: "2015-01-01"
+  # end: "2025-12-31"
+  cache_dir: data/cache
+  use_cache: true
+  # Historique minimum (en seances) avant qu'un titre soit eligible.
+  min_history: 260
+
+features:
+  momentum_windows: [21, 63, 126, 252]
+  vol_windows: [21, 63]
+  rsi_period: 14
+  min_cross_section: 5
+
+model:
+  # gbm   : gradient boosting (defaut, capte les interactions)
+  # ridge : lineaire regularise (plus lisible, plus stable sur petit univers)
+  # rules : aucun apprentissage, uniquement le score multi-facteur
+  kind: gbm
+  # Horizon de prevision, en seances. 5 = une semaine.
+  horizon: 5
+  # rank : on apprend le classement (robuste, recommande)
+  label: rank
+  # Poids du score a base de regles dans le melange final.
+  # Le monter (0.5-1.0) rend le systeme plus prudent et plus stable.
+  rules_weight: 0.35
+  # Moyenne le signal sur N seances avant de classer (1 = pas de lissage).
+  # Levier majeur sur la rotation : un score qui change tous les jours alors
+  # que l'horizon est de 5 seances est surtout du bruit.
+  score_smoothing: 5
+  min_train_rows: 1500
+  retrain_every: 21
+  embargo_days: 3
+  max_train_years: 8.0
+  sample_half_life_years: 3.0
+
+portfolio:
+  capital: 100000
+  currency: USD
+  max_positions: 10
+  max_weight: 0.20
+  min_weight: 0.02
+  # On n'achete que les titres au-dessus de ce score (score dans [-1, 1]).
+  score_threshold: 0.0
+  # Hysterese : on ne vend une ligne detenue que si son score tombe sous ce
+  # seuil. L'ecart entre les deux pilote directement la rotation (et les frais).
+  exit_threshold: -0.25
+  hold_bonus: 0.15
+  # Volatilite annualisee visee pour l'ensemble du portefeuille.
+  vol_target: 0.15
+  # 1.0 = pas de levier.
+  max_gross: 1.0
+  # Reduit l'exposition quand le marche passe sous sa moyenne mobile longue.
+  regime_filter: true
+  regime_ma: 200
+  regime_risk_off: 0.40
+  # Pas d'ordre tant que l'ecart de poids reste sous ce seuil (anti-frais).
+  no_trade_band: 0.02
+  min_order_notional: 100
+  fractional_shares: false
+  cash_buffer: 0.02
+  vol_lookback: 63
+  covariance_shrinkage: 0.30
+
+backtest:
+  start: "2018-01-01"
+  # end: "2025-12-31"
+  # Rebalancement tous les N jours de bourse (5 = hebdomadaire).
+  rebalance_days: 5
+  # Frais de courtage, en points de base (5 bps = 0.05 %).
+  cost_bps: 5
+  # Ecart entre le prix decide et le prix obtenu.
+  slippage_bps: 5
+  # next_open (realiste) | next_close | close (optimiste)
+  execution: next_open
+  warmup_days: 260
+
+paths:
+  state_file: state/portfolio.json
+  model_file: models/model.joblib
+  output_dir: output
+"""

@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Donnees et sorties locales (ne pas versionner)
+data/cache/
+data/prices/
+state/
+output/
+models/
+config/config.yaml
+*.joblib
