@@ -303,7 +303,7 @@ il n'y a pas grand-chose à classer. Visez au moins 20 à 30 titres.
 
 ```bash
 pip install -e ".[dev]"
-pytest                    # 129 tests, ~45 s
+pytest                    # 134 tests
 pytest -m "not slow"      # sans les tests d'apprentissage
 ```
 
