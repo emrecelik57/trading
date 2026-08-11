@@ -7,24 +7,38 @@ vendre et en quelle quantité**.
 ```
 $ quantfolio daily
 
-SEANCE DU 2025-11-14
-  Modele : gbm, 38420 observations x 19 indicateurs du 2017-11-02 au 2025-11-03 | ic_in_sample=0.1841
+SEANCE DU 2026-08-10
+====================
+  Modele : gbm, 40200 observations x 19 indicateurs du 2018-07-30 au 2026-07-29
 
 PORTEFEUILLE CIBLE
-  Exposition visee 82.4% | liquidites 17.6% | vol estimee 18.2% vs cible 15.0%
-
-  ticker  score   vol ann.  poids
-  ------  ------  --------  -----
-  NVDA    +0.90     38.4%   14.2%
-  AVGO    +0.80     31.1%   12.8%
-  COST    +0.70     19.5%   12.0%
+==================
+  Exposition visee 98.0% | liquidites 2.0% | vol estimee 12.0% vs cible 15.0%
+  ticker  score  vol ann.  poids
+  ------  -----  --------  -----
+  UNH     +1.00  26.0%     17.8%
+  JNJ     +0.90  25.0%     17.0%
+  XOM     +0.70  29.2%     12.1%
+  GOOGL   +0.80  38.0%     10.3%
   ...
 
+CLASSEMENT DU JOUR
+------------------
+  Bas de classement (a eviter / vendre) :
+    COST  -0.700
+    MSFT  -0.800
+    AVGO  -0.900
+
 ORDRES A PASSER
-  sens   ticker  qte  cours    montant  poids act.  poids cible  score  motif
-  -----  ------  ---  -------  -------  ----------  -----------  -----  ----------
-  VENTE  XOM      82   112.40    9,217        9.2%         0.0%  -0.30  sortie complete
-  ACHAT  NVDA     31   186.20    5,772        8.4%        14.2%  +0.90  renforcement
+===============
+  sens   ticker  qte  cours   montant  poids act.  poids cible  score  motif
+  -----  ------  ---  ------  -------  ----------  -----------  -----  ---------
+  ACHAT  UNH     43   408.74  17,576   0.0%        17.8%        +1.00  ouverture
+  ACHAT  JNJ     65   261.81  17,018   0.0%        17.0%        +0.90  ouverture
+  ACHAT  XOM     75   159.79  11,984   0.0%        12.1%        +0.70  ouverture
+
+  10 achat(s) pour 96,614 USD | frais estimes 48 USD
+  Capital 100,000 USD | liquidites 100,000 -> 3,338 USD | rotation 96.6%
 ```
 
 Le modèle et la gestion du risque sont fournis ; **la source de données est un
@@ -239,6 +253,43 @@ Le résultat reste **une simulation optimiste**, et il faut le lire comme tel :
 
 Comparez toujours au benchmark affiché : une stratégie qui fait 12 % quand
 l'indice fait 15 % n'est pas une bonne stratégie, même si 12 % fait plaisir.
+
+### Ce que donne la configuration par défaut
+
+Voici ce que produit la config livrée, telle quelle, sur les 20 grandes
+capitalisations américaines de l'exemple, de 2018 à 2026 :
+
+| `score_smoothing` | CAGR | Vol | Sharpe | Max DD | Rotation/an | IC |
+|---|---|---|---|---|---|---|
+| 1 (aucun lissage) | 10.4 % | 13.8 % | 0.79 | −22.5 % | 2977 % | +0.021 |
+| **5 (défaut)** | 10.2 % | 13.9 % | 0.77 | −21.6 % | 2411 % | +0.013 |
+| 10 | 10.9 % | 14.0 % | 0.81 | −22.3 % | 1892 % | +0.012 |
+
+Sur la même période, **le S&P 500 fait 14.8 % par an**, avec 19.1 % de
+volatilité et un drawdown maximal de −33.7 %.
+
+Lisez ce tableau honnêtement, il dit trois choses :
+
+1. **La stratégie ne bat pas l'indice en absolu**, et l'écart est net. Elle prend
+   en revanche nettement moins de risque : beta 0.54, drawdown réduit d'un tiers.
+   Le rapport des rendements (0.70) est quasiment celui des volatilités (0.72) —
+   autrement dit, sur cet échantillon, **le modèle n'a pas apporté d'avantage
+   mesurable au-delà du fait de prendre moins de risque** (Sharpe 0.77 contre
+   0.82 pour l'indice). Si vous voulez une exposition comparable à celle du
+   marché, montez `vol_target` ; ne vous attendez pas pour autant à de l'alpha.
+2. **Le lissage réduit franchement la rotation** (−36 % entre 1 et 10) pour un
+   effet sur la performance qui reste dans le bruit. Le défaut est fixé à 5, soit
+   l'horizon de prévision — choisi *avant* de regarder ce tableau. La valeur 10 y
+   fait un peu mieux, mais retenir un paramètre parce qu'il gagne sur un seul
+   échantillon, c'est exactement le sur-ajustement décrit plus haut.
+3. **L'IC baisse quand on lisse** (0.021 → 0.012) : le lissage efface une part du
+   signal court terme en même temps que le bruit. Il se paie, simplement moins
+   cher qu'il ne rapporte en frais évités.
+
+Un IC de 0.02 avec un t-stat de 1.5 sur 430 dates, c'est un signal ténu, à la
+limite du significatif. Ce n'est pas un défaut de l'outil : c'est ce à quoi il
+faut s'attendre sur 20 méga-capitalisations très suivies. Un univers plus large
+et moins efficient laisse davantage de place au classement.
 
 ---
 
