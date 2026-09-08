@@ -1,116 +1,93 @@
-"""Coherence du backtest."""
+"""Backtest : absence de biais de look-ahead et coherence des sorties."""
 
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import pytest
 
-from quantfolio.backtest import run_backtest
-from quantfolio.engine import Engine
-
-from conftest import make_config
-
-
-@pytest.fixture(scope="module")
-def result():
-    tickers = [f"T{i:02d}" for i in range(12)]
-    cfg = make_config(
-        tickers,
-        model={"kind": "rules"},
-        backtest={"start": "2019-01-01", "rebalance_days": 10, "cost_bps": 5, "slippage_bps": 5},
-    )
-    engine = Engine(cfg)
-    engine.prepare()
-    return run_backtest(engine, cfg), cfg
+from volatrade.backtest import WARMUP, run_backtest, summarize
+from volatrade.risk import RiskSettings
+from tests.conftest import make_quote, trending_prices
 
 
-def test_backtest_produces_a_continuous_equity_curve(result):
-    backtest, _ = result
-    assert len(backtest.equity) > 200
-    assert backtest.equity.notna().all()
-    assert (backtest.equity > 0).all()
-    assert backtest.equity.index.is_monotonic_increasing
+SETTINGS = RiskSettings(capital=100_000, risk_per_trade=0.01, atr_stop_multiple=2.5)
 
 
-def test_cash_never_goes_negative(result):
-    backtest, _ = result
-    assert backtest.state.cash >= -1e-6
+def test_rapport_vide_sans_trade():
+    report = summarize([])
+    assert report.n_trades == 0
+    assert np.isnan(report.avg_r)
 
 
-def test_no_short_positions(result):
-    backtest, _ = result
-    assert all(position.shares >= 0 for position in backtest.state.positions.values())
+def test_entree_a_louverture_de_la_seance_suivante():
+    quote = make_quote("HAUT", trending_prices(n=400, drift=0.004, noise=0.01, seed=2))
+    _, per_ticker = run_backtest({"HAUT": quote}, None, SETTINGS, decision_every=5)
+    trades = per_ticker["HAUT"].trades
+    assert trades, "une serie franchement haussiere doit declencher des trades"
+    frame = quote.frame
+    for trade in trades:
+        date = pd.Timestamp(trade.entry_date, tz="UTC")
+        assert trade.entry_price == pytest.approx(float(frame.loc[date, "open"]))
 
 
-def test_final_equity_matches_cash_plus_positions(result):
-    backtest, cfg = result
-    # La derniere valeur de la courbe doit se reconstituer a partir de l'etat.
-    engine = Engine(cfg)
-    prices = engine.load().panel.close.loc[backtest.equity.index[-1]]
-    assert backtest.state.equity(prices) == pytest.approx(backtest.equity.iloc[-1], rel=1e-9)
+def test_aucun_trade_avant_la_periode_de_chauffe():
+    quote = make_quote("HAUT", trending_prices(n=400, drift=0.004, noise=0.01, seed=2))
+    _, per_ticker = run_backtest({"HAUT": quote}, None, SETTINGS, decision_every=5)
+    premiere_date_possible = quote.frame.index[WARMUP]
+    for trade in per_ticker["HAUT"].trades:
+        assert pd.Timestamp(trade.entry_date, tz="UTC") >= premiere_date_possible
 
 
-def test_positions_stay_within_the_configured_limits(result):
-    backtest, cfg = result
-    assert not backtest.weights.empty
-    assert (backtest.weights > 1e-9).sum(axis=1).max() <= cfg.portfolio.max_positions
-    assert backtest.weights.max().max() <= cfg.portfolio.max_weight + 1e-9
-    assert backtest.weights.sum(axis=1).max() <= cfg.portfolio.max_gross + 1e-9
+def test_perte_bornee_a_une_unite_de_risque():
+    # Hausse suivie d'un effondrement : les trades perdants sortent au stop,
+    # donc au-dela de -1 R seulement en cas de gap a l'ouverture.
+    prices = np.concatenate([trending_prices(n=300, drift=0.003, noise=0.01, seed=1),
+                             np.linspace(1.0, 0.5, 120) * trending_prices(1, seed=1)[0]])
+    quote = make_quote("CASSE", prices)
+    report, _ = run_backtest({"CASSE": quote}, None, SETTINGS, decision_every=5)
+    if report.n_trades:
+        assert report.worst_r >= -1.6
 
 
-def test_costs_are_actually_charged(result):
-    backtest, _ = result
-    assert len(backtest.trades) > 0
-    assert backtest.state.total_costs > 0
-    assert backtest.trades["cost"].min() >= 0
+def test_serie_baissiere_ne_declenche_aucun_achat(downtrend_frame):
+    from volatrade.data import Quote
+
+    quote = Quote("BAS", "USD", "TEST", downtrend_frame)
+    report, _ = run_backtest({"BAS": quote}, None, SETTINGS, decision_every=5)
+    assert report.n_trades == 0
 
 
-def test_transaction_costs_reduce_performance():
-    """Doubler les frais doit degrader le resultat, jamais l'ameliorer."""
-    tickers = [f"T{i:02d}" for i in range(12)]
-    outcomes = []
-    for cost in (0.0, 50.0):
-        cfg = make_config(
-            tickers,
-            model={"kind": "rules"},
-            backtest={"start": "2019-01-01", "rebalance_days": 5,
-                      "cost_bps": cost, "slippage_bps": cost},
-        )
-        engine = Engine(cfg)
-        engine.prepare()
-        outcomes.append(run_backtest(engine, cfg).equity.iloc[-1])
-    assert outcomes[0] > outcomes[1]
+def test_historique_trop_court_ignore():
+    quote = make_quote("COURT", np.linspace(10, 20, 100))
+    report, per_ticker = run_backtest({"COURT": quote}, None, SETTINGS)
+    assert report.n_trades == 0
+    assert per_ticker["COURT"].n_trades == 0
 
 
-def test_execution_mode_close_is_more_optimistic_than_next_open():
-    """Executer au cours du signal donne un resultat different (et flatteur)."""
-    tickers = [f"T{i:02d}" for i in range(12)]
-    equities = {}
-    for mode in ("close", "next_open"):
-        cfg = make_config(
-            tickers,
-            model={"kind": "rules"},
-            backtest={"start": "2019-01-01", "rebalance_days": 10, "execution": mode},
-        )
-        engine = Engine(cfg)
-        engine.prepare()
-        equities[mode] = run_backtest(engine, cfg).equity.iloc[-1]
-    assert equities["close"] != equities["next_open"]
+def test_statistiques_coherentes():
+    quote = make_quote("HAUT", trending_prices(n=500, drift=0.003, noise=0.015, seed=8))
+    report, _ = run_backtest({"HAUT": quote}, None, SETTINGS, decision_every=5)
+    if report.n_trades:
+        resultats = [trade.r_multiple for trade in report.trades]
+        assert report.total_r == pytest.approx(sum(resultats))
+        assert report.avg_r == pytest.approx(np.mean(resultats))
+        assert report.best_r == pytest.approx(max(resultats))
+        assert report.worst_r == pytest.approx(min(resultats))
+        assert 0 <= report.win_rate <= 1
+        assert report.max_drawdown_r <= 0
+        assert report.capital_return == pytest.approx(report.total_r * SETTINGS.risk_per_trade)
 
 
-def test_backtest_refuses_a_period_that_is_too_short():
-    """Une phase de chauffe plus longue que l'historique doit etre signalee."""
-    tickers = [f"T{i:02d}" for i in range(12)]
-    cfg = make_config(tickers, backtest={"start": "2019-01-01", "warmup_days": 5000})
-    engine = Engine(cfg)
-    engine.prepare()
-    with pytest.raises(ValueError, match="trop courte"):
-        run_backtest(engine, cfg)
+def test_cadence_de_decision_reduit_le_nombre_de_trades():
+    quote = make_quote("HAUT", trending_prices(n=600, drift=0.002, noise=0.02, seed=12))
+    rapide, _ = run_backtest({"HAUT": quote}, None, SETTINGS, decision_every=1)
+    lent, _ = run_backtest({"HAUT": quote}, None, SETTINGS, decision_every=20)
+    assert rapide.n_trades >= lent.n_trades
 
 
-def test_summary_contains_the_expected_metrics(result):
-    backtest, _ = result
-    for key in ("cagr", "volatilite", "sharpe", "max_drawdown", "rotation_annuelle"):
-        assert key in backtest.summary
-    assert np.isfinite(backtest.summary["sharpe"])
-    assert backtest.summary["max_drawdown"] <= 0.0
+def test_reference_acheter_conserver_calculee():
+    quote = make_quote("HAUT", trending_prices(n=500, drift=0.002, noise=0.01, seed=3))
+    report, _ = run_backtest({"HAUT": quote}, None, SETTINGS, decision_every=5)
+    attendu = float(quote.frame["close"].iloc[-1] / quote.frame["close"].iloc[WARMUP] - 1)
+    assert report.buy_hold == pytest.approx(attendu)

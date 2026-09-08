@@ -1,0 +1,23 @@
+{
+  "capital": 20000,
+  "devise": "$",
+
+  "risque_par_trade": 0.01,
+  "multiple_atr_stop": 2.5,
+  "poids_max": 0.15,
+  "volatilite_cible": 0.45,
+  "chaleur_max": 0.06,
+  "exposition_max": 1.0,
+  "max_positions_par_theme": 2,
+
+  "nombre_titres": 10,
+  "volume_min": 30000000,
+  "prix_min": 3.0,
+  "volatilite_max": 2.5,
+  "indice_reference": "SPY",
+
+  "historique": "2y",
+  "taux_sans_risque": 0.03,
+  "cache_ttl_heures": 6,
+  "dossier_cache": ".volatrade_cache"
+}

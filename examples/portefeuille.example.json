@@ -1,0 +1,27 @@
+[
+  {
+    "ticker": "MU",
+    "shares": 3,
+    "entry_price": 700.0,
+    "entry_date": "2026-06-02",
+    "stop_price": 640.0,
+    "target1": 790.0,
+    "target2": 880.0,
+    "trimmed": []
+  },
+  {
+    "ticker": "RIOT",
+    "shares": 100,
+    "entry_price": 24.0,
+    "entry_date": "2026-08-10"
+  },
+  {
+    "ticker": "RKLB",
+    "shares": 15,
+    "entry_price": 58.0,
+    "entry_date": "2026-07-15",
+    "stop_price": 49.0,
+    "target1": 71.5,
+    "trimmed": ["objectif1"]
+  }
+]

@@ -1,4 +1,4 @@
-"""Permet `python -m quantfolio ...`."""
+"""Permet `python -m volatrade`."""
 
 from .cli import main
 
