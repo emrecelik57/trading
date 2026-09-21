@@ -11,6 +11,7 @@
   "max_positions_par_theme": 2,
   "jours_avant_resultats": 3,
   "sortie_avant_resultats": true,
+  "resultats_auto": true,
 
   "nombre_titres": 10,
   "volume_min": 30000000,
@@ -21,5 +22,6 @@
   "historique": "2y",
   "taux_sans_risque": 0.03,
   "cache_ttl_heures": 6,
+  "cache_resultats_heures": 24,
   "dossier_cache": ".volatrade_cache"
 }
