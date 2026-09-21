@@ -33,6 +33,12 @@ class RiskSettings:
     max_positions_per_theme: int = 2
     correlation_haircut: float = 0.40     # decote max pour redondance
 
+    # Politique face aux publications de resultats. Un stop ne protege pas
+    # d'un gap : le titre ouvre directement sous le stop et l'ordre part au
+    # premier cours cote, pas au niveau prevu.
+    earnings_exit_days: int = 3           # seuil de declenchement, en seances
+    exit_before_earnings: bool = True     # True = vendre ; False = simple alerte
+
 
 @dataclass(frozen=True)
 class Sizing:

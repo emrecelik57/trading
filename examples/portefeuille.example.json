@@ -7,21 +7,23 @@
     "stop_price": 640.0,
     "target1": 790.0,
     "target2": 880.0,
-    "trimmed": []
+    "trimmed": [],
+    "date_resultats": "2026-12-17"
+  },
+  {
+    "ticker": "AMD",
+    "shares": 1,
+    "entry_price": 509.6,
+    "entry_date": "2026-09-14",
+    "stop_price": 482.55,
+    "target1": 600.59,
+    "target2": 685.49,
+    "date_resultats": "2026-11-02"
   },
   {
     "ticker": "RIOT",
     "shares": 100,
     "entry_price": 24.0,
     "entry_date": "2026-08-10"
-  },
-  {
-    "ticker": "RKLB",
-    "shares": 15,
-    "entry_price": 58.0,
-    "entry_date": "2026-07-15",
-    "stop_price": 49.0,
-    "target1": 71.5,
-    "trimmed": ["objectif1"]
   }
 ]

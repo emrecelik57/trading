@@ -9,6 +9,8 @@
   "chaleur_max": 0.06,
   "exposition_max": 1.0,
   "max_positions_par_theme": 2,
+  "jours_avant_resultats": 3,
+  "sortie_avant_resultats": true,
 
   "nombre_titres": 10,
   "volume_min": 30000000,

@@ -28,6 +28,8 @@ class AppConfig:
     chaleur_max: float = 0.06
     exposition_max: float = 1.00
     max_positions_par_theme: int = 2
+    jours_avant_resultats: int = 3
+    sortie_avant_resultats: bool = True
 
     # Selection
     nombre_titres: int = 10
@@ -54,6 +56,8 @@ class AppConfig:
             max_portfolio_heat=self.chaleur_max,
             max_exposure=self.exposition_max,
             max_positions_per_theme=self.max_positions_par_theme,
+            earnings_exit_days=self.jours_avant_resultats,
+            exit_before_earnings=self.sortie_avant_resultats,
         )
 
     def validate(self) -> "AppConfig":
@@ -68,6 +72,8 @@ class AppConfig:
             raise ConfigError("nombre_titres doit valoir au moins 1")
         if self.multiple_atr_stop <= 0:
             raise ConfigError("multiple_atr_stop doit etre positif")
+        if self.jours_avant_resultats < 0:
+            raise ConfigError("jours_avant_resultats ne peut pas etre negatif")
         if not self.univers:
             raise ConfigError("l'univers de depart est vide")
         return self

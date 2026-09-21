@@ -145,6 +145,7 @@ Chaque plan comprend sept règles de sortie, décidées **avant** l'entrée :
 | Rupture de tendance | 2 clôtures à plus de 1 ATR sous la MM50 | Vendre la totalité du solde |
 | Stop temporel | 25 séances sans atteindre +0,5 R | Solder : le capital travaille mieux ailleurs |
 | Choc de volatilité | Vol. 1 mois > 1,8 × vol. 6 mois | Réduire de moitié, même sans signal de prix |
+| **Publication de résultats** | 3 séances avant la date renseignée | **Solder la totalité** — voir ci-dessous |
 
 L'horizon affiché est estimé par marche aléatoire : le temps moyen pour parcourir
 3 R vaut (distance ÷ volatilité quotidienne)² séances. C'est un ordre de grandeur,
@@ -159,15 +160,42 @@ avec le gain latent en devise, en pourcentage et en R.
 ```json
 [
   {"ticker": "MU", "shares": 3, "entry_price": 700.0, "entry_date": "2026-06-02",
-   "stop_price": 640.0, "target1": 790.0, "target2": 880.0, "trimmed": []}
+   "stop_price": 640.0, "target1": 790.0, "target2": 880.0, "trimmed": [],
+   "date_resultats": "2026-12-17"}
 ]
 ```
 
 Seuls `ticker`, `shares` et `entry_price` sont obligatoires : un stop ou un objectif
 absent est reconstruit à partir de l'ATR courant. `trimmed` liste les objectifs déjà
 encaissés (`"objectif1"`, `"objectif2"`) pour qu'ils ne soient pas reproposés et
-pour que le stop ne redescende jamais sous le point mort. Voir
-`examples/portefeuille.example.json`.
+pour que le stop ne redescende jamais sous le point mort. `date_resultats` est la
+date de publication trimestrielle (voir § 7 ci-dessous) ; une date illisible est
+refusée au chargement plutôt qu'ignorée. Voir `examples/portefeuille.example.json`.
+
+### 7. La règle « résultats »
+
+C'est la seule sortie qui ne dépend d'aucun signal de prix, et la raison est
+simple : **un stop ne protège pas d'un gap d'ouverture.** Si le titre ouvre sous
+votre stop, l'ordre ne part pas au niveau prévu mais au premier cours coté, qui
+peut être 5 % plus bas. Or une publication trimestrielle est précisément
+l'événement qui produit ces gaps — sur AMD, les écarts d'ouverture mesurés sur
+5 ans vont de −11,2 % à +37,5 %.
+
+Renseignez `date_resultats` dans votre portefeuille et `volatrade suivi` :
+
+- **prévient à l'avance** : « publication dans 22 séances, sortie prévue dans 19 » ;
+- **passe en VENDRE** à 3 séances de l'échéance (seuil configurable), en soldant
+  la ligne entière — pas d'allègement partiel, la logique est tout ou rien ;
+- **signale une date périmée** plutôt que de l'ignorer silencieusement.
+
+Deux réglages dans la configuration : `jours_avant_resultats` (défaut 3) et
+`sortie_avant_resultats`. Mettez ce dernier à `false` si vous préférez traverser
+les publications : l'outil se contente alors de vous prévenir. C'est défendable
+sur une petite ligne, où la perte maximale reste supportable et où la
+distribution des gaps est souvent asymétrique vers le haut.
+
+L'ordre de priorité des règles reste : stop touché, rupture de tendance, **puis**
+publication, puis objectifs. Une ligne déjà stoppée se solde, publication ou pas.
 
 ## Backtest : ce que valent ces règles
 
@@ -224,6 +252,8 @@ volatrade plan --config config/config.example.json
 | `chaleur_max` | 0.06 | Somme maximale des risques ouverts |
 | `exposition_max` | 1.0 | Part maximale du capital investie |
 | `max_positions_par_theme` | 2 | Lignes maximum par thématique |
+| `jours_avant_resultats` | 3 | Séances avant publication déclenchant la vente |
+| `sortie_avant_resultats` | true | `false` = simple alerte, on traverse la publication |
 | `nombre_titres` | 10 | Taille de la sélection |
 | `volume_min` | 30000000 | Volume médian minimum, en devise par jour |
 | `prix_min` | 3.0 | Cours plancher |
@@ -262,12 +292,13 @@ pip install -e ".[dev]"
 pytest
 ```
 
-122 tests, aucun accès réseau : les cours sont synthétiques ou injectés, y compris
+133 tests, aucun accès réseau : les cours sont synthétiques ou injectés, y compris
 pour les tests de bout en bout de la ligne de commande. Ils couvrent notamment la
 calibration des mesures de risque sur des séries aux propriétés connues,
 l'application des filtres de sélection, les garde-fous du score, la primauté de la
-contrainte la plus sévère dans le dimensionnement, chaque règle de vente, et
-l'absence de biais de look-ahead dans le backtest.
+contrainte la plus sévère dans le dimensionnement, chaque règle de vente (y compris
+l'ordre de priorité entre stop, publication et objectifs), et l'absence de biais de
+look-ahead dans le backtest.
 
 ## Limites connues
 
@@ -275,8 +306,9 @@ l'absence de biais de look-ahead dans le backtest.
   vivier et les filtres de liquidité sont calibrés pour les États-Unis).
 - Données de fin de séance : les plans se lisent avant l'ouverture suivante, pas en
   intraday.
-- Aucune donnée fondamentale, aucun calendrier de résultats — or une publication
-  trimestrielle est la première cause de gap au-delà du stop sur ces titres.
+- Aucune donnée fondamentale. Les dates de publication ne sont pas téléchargées :
+  c'est à vous de renseigner `date_resultats` par position, sans quoi la règle du
+  § 7 reste inerte.
 - Les paramètres (2,5 ATR, +1,5 R / +3 R, 25 séances) sont des valeurs de bon sens
   vérifiées par backtest, pas des optima : les optimiser sur deux ans d'historique
   reviendrait surtout à mémoriser le passé.

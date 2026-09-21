@@ -279,12 +279,20 @@ def format_reviews(reviews: list[PositionReview], currency: str = "$") -> str:
                 money(review.stop_price, currency),
                 money(review.suggested_stop, currency),
                 f"{review.days_held} j",
+                (
+                    "-" if review.days_to_earnings is None
+                    else f"{review.days_to_earnings} j" if review.days_to_earnings >= 0
+                    else "passee"
+                ),
             ]
         )
     header = table(
-        ["Titre", "Verdict", "Achat", "Cours", "Perf.", "R", "P&L", "Stop", "Stop suggere", "Duree"],
+        [
+            "Titre", "Verdict", "Achat", "Cours", "Perf.", "R", "P&L",
+            "Stop", "Stop suggere", "Duree", "Resultats",
+        ],
         rows,
-        aligns="llrrrrrrrr",
+        aligns="llrrrrrrrrr",
     )
     details = []
     for review in ordered:

@@ -5,11 +5,16 @@ Le fichier de portefeuille est un JSON simple :
     [
       {"ticker": "TSLA", "shares": 12, "entry_price": 250.0,
        "entry_date": "2026-06-02", "stop_price": 221.5,
-       "target1": 294.3, "target2": 382.9, "trimmed": []}
+       "target1": 294.3, "target2": 382.9, "trimmed": [],
+       "date_resultats": "2026-11-02"}
     ]
 
 Seuls `ticker`, `shares` et `entry_price` sont obligatoires : le stop et les
 objectifs manquants sont reconstruits a partir de l'ATR courant.
+
+`date_resultats` est la date de publication trimestrielle. Elle declenche une
+sortie avant la publication : un stop ne protege pas d'un gap d'ouverture, le
+titre ouvre directement sous le niveau et l'ordre part au premier cours cote.
 """
 
 from __future__ import annotations
@@ -53,14 +58,21 @@ class Position:
     target1: float | None = None
     target2: float | None = None
     trimmed: list[str] = field(default_factory=list)
+    date_resultats: str | None = None
 
     @classmethod
     def from_dict(cls, raw: dict) -> "Position":
         missing = [key for key in ("ticker", "shares", "entry_price") if key not in raw]
         if missing:
             raise PortfolioError(f"position incomplete, champs manquants : {', '.join(missing)}")
+        ticker = str(raw["ticker"]).upper()
+        earnings = raw.get("date_resultats")
+        if earnings is not None and parse_date(earnings) is None:
+            raise PortfolioError(
+                f"{ticker}: date_resultats illisible ({earnings!r}), format attendu AAAA-MM-JJ"
+            )
         return cls(
-            ticker=str(raw["ticker"]).upper(),
+            ticker=ticker,
             shares=float(raw["shares"]),
             entry_price=float(raw["entry_price"]),
             entry_date=raw.get("entry_date"),
@@ -68,6 +80,7 @@ class Position:
             target1=float(raw["target1"]) if raw.get("target1") is not None else None,
             target2=float(raw["target2"]) if raw.get("target2") is not None else None,
             trimmed=list(raw.get("trimmed", [])),
+            date_resultats=earnings,
         )
 
 
@@ -88,6 +101,7 @@ class PositionReview:
     target1: float
     target2: float
     days_held: int
+    days_to_earnings: int | None = None
     actions: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
@@ -111,18 +125,45 @@ def load_portfolio(path: Path | str) -> list[Position]:
     return [Position.from_dict(item) for item in raw]
 
 
-def _days_held(entry_date: str | None, last_date) -> int:
-    if not entry_date:
-        return 0
+def parse_date(value) -> pd.Timestamp | None:
+    """Lit une date AAAA-MM-JJ ; renvoie None si elle est illisible.
+
+    Les nombres sont refuses : pandas les interpreterait comme un horodatage
+    Unix et transformerait silencieusement `2026` en 1970.
+    """
+    if value is None or isinstance(value, bool) or isinstance(value, (int, float)):
+        return None
+    if isinstance(value, str) and not value.strip():
+        return None
     try:
-        start = pd.Timestamp(entry_date, tz="UTC")
+        parsed = pd.Timestamp(value)
     except (ValueError, TypeError):
+        return None
+    if pd.isna(parsed):
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.tz_localize(None)
+    return parsed.normalize()
+
+
+def _business_days(start, end) -> int:
+    """Nombre de seances ouvrees entre deux dates (negatif si `end` precede)."""
+    return int(np.busday_count(pd.Timestamp(start).date(), pd.Timestamp(end).date()))
+
+
+def _days_held(entry_date: str | None, last_date) -> int:
+    start = parse_date(entry_date)
+    if start is None:
         return 0
-    end = pd.Timestamp(last_date)
-    if end.tzinfo is None:
-        end = end.tz_localize("UTC")
-    # ~21 seances de bourse par mois calendaire.
-    return int(max(0, np.busday_count(start.date(), end.date())))
+    return max(0, _business_days(start, parse_date(last_date) or start))
+
+
+def _days_to_earnings(earnings_date: str | None, last_date) -> int | None:
+    """Seances restantes avant la publication, None si la date est absente."""
+    target = parse_date(earnings_date)
+    if target is None:
+        return None
+    return _business_days(parse_date(last_date) or target, target)
 
 
 def review_position(
@@ -171,6 +212,15 @@ def review_position(
     elif np.isfinite(trailing):
         suggested_stop = max(stop, trailing) if r_multiple >= 1.0 else stop
 
+    days_to_earnings = _days_to_earnings(position.date_resultats, frame.index[-1])
+    # Une publication imminente est le seul cas ou l'on sort sans signal de
+    # prix : le stop ne protege pas d'un gap d'ouverture.
+    earnings_now = (
+        settings.exit_before_earnings
+        and days_to_earnings is not None
+        and 0 <= days_to_earnings <= settings.earnings_exit_days
+    )
+
     actions: list[str] = []
     notes: list[str] = []
     verdict = VERDICT_HOLD
@@ -183,6 +233,17 @@ def review_position(
         actions.append(
             f"deux clotures a plus d'un ATR sous la moyenne 50 jours ({sma50:.2f}) : "
             "sortir, la tendance est cassee"
+        )
+    elif earnings_now:
+        verdict = VERDICT_SELL
+        quand = (
+            "aujourd'hui" if days_to_earnings == 0
+            else f"dans {days_to_earnings} seance" + ("s" if days_to_earnings > 1 else "")
+        )
+        actions.append(
+            f"publication des resultats {quand} ({position.date_resultats}) : solder la "
+            f"totalite avant la cloture. Un stop a {stop:.2f} ne protege pas d'un gap "
+            "d'ouverture, l'ordre partirait au premier cours cote"
         )
     elif price >= target2 and "objectif2" not in position.trimmed:
         verdict = VERDICT_TRIM
@@ -206,6 +267,21 @@ def review_position(
         verdict = VERDICT_TIGHTEN
         actions.append(f"remonter le stop de {stop:.2f} a {suggested_stop:.2f}")
 
+    if days_to_earnings is not None and not earnings_now:
+        if days_to_earnings < 0:
+            notes.append(
+                f"date de resultats depassee ({position.date_resultats}) : a mettre a jour"
+            )
+        else:
+            reste = days_to_earnings - settings.earnings_exit_days
+            notes.append(
+                f"publication dans {days_to_earnings} seances ({position.date_resultats})"
+                + (
+                    f", sortie prevue dans {reste} seances"
+                    if settings.exit_before_earnings and reste > 0
+                    else ""
+                )
+            )
     if np.isfinite(atr_value):
         notes.append(f"amplitude quotidienne typique : {atr_value / price:.1%} du cours")
     notes.append(f"gain/perte latent : {pnl:+,.0f} ({pnl_pct:+.1%}, {r_multiple:+.2f} R)")
@@ -229,6 +305,7 @@ def review_position(
         target1=float(target1),
         target2=float(target2),
         days_held=days,
+        days_to_earnings=days_to_earnings,
         actions=actions,
         notes=notes,
     )
