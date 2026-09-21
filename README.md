@@ -188,6 +188,10 @@ Renseignez `date_resultats` dans votre portefeuille et `volatrade suivi` :
   la ligne entière — pas d'allègement partiel, la logique est tout ou rien ;
 - **signale une date périmée** plutôt que de l'ignorer silencieusement.
 
+**Vous n'avez pas à chercher la date vous-même** : `volatrade suivi` la complète
+automatiquement quand elle manque, et `volatrade resultats AMD MU` l'affiche pour
+n'importe quels tickers. Voir § 8.
+
 Deux réglages dans la configuration : `jours_avant_resultats` (défaut 3) et
 `sortie_avant_resultats`. Mettez ce dernier à `false` si vous préférez traverser
 les publications : l'outil se contente alors de vous prévenir. C'est défendable
@@ -196,6 +200,48 @@ distribution des gaps est souvent asymétrique vers le haut.
 
 L'ordre de priorité des règles reste : stop touché, rupture de tendance, **puis**
 publication, puis objectifs. Une ligne déjà stoppée se solde, publication ou pas.
+
+### 8. D'où vient la date de publication
+
+L'API de cours ne la donne plus : les endpoints `quoteSummary` et
+`v7/finance/quote` de Yahoo répondent `401 Invalid Crumb`. `earnings.py`
+interroge donc Nasdaq, sans clé ni compte, en deux temps :
+
+1. **l'annonce publiée** (`/api/analyst/<ticker>/earnings-date`) ;
+2. **à défaut, une projection** à partir des dates déjà publiées
+   (`/api/company/<ticker>/earnings-surprise`), en prolongeant la cadence
+   trimestrielle observée — la médiane des écarts, bornée à 60-120 jours pour
+   qu'un rattrapage comptable ne fausse pas le calcul.
+
+```
+$ volatrade resultats AMD MU NVDA TSM MRVL 005930.KS
+
+  Titre     | Date        | Source
+  ----------+-------------+----------------------
+  AMD       | 2026-11-03  | annonce Nasdaq
+  MU        | 2026-09-30  | annonce Nasdaq
+  NVDA      | 2026-12-02  | cadence trimestrielle
+  TSM       | 2026-10-15  | annonce Nasdaq
+  MRVL      | 2026-11-27  | cadence trimestrielle
+  005930.KS | introuvable | -
+```
+
+Le repli sert souvent : sur ces six titres, l'annonce directe ne couvre que
+quatre cas, la projection en rattrape deux. Les valeurs cotées hors des
+États-Unis (Samsung à Séoul) ne sont pas couvertes du tout.
+
+**Ces dates sont des estimations.** Nasdaq l'écrit : elles sont dérivées de
+l'historique de publication tant que l'entreprise n'a rien confirmé. D'où la
+règle de préséance :
+
+- une date saisie à la main **n'est jamais écrasée** ; en cas de désaccord, la
+  vôtre est conservée et l'écart est affiché ;
+- une date absente est complétée et la provenance est indiquée ;
+- si rien n'est trouvé, la règle du § 7 reste simplement inactive pour ce titre.
+
+Le cache est plus long que celui des cours (24 h par défaut) : une date de
+publication ne bouge pas d'une heure à l'autre. `resultats_auto: false` coupe
+entièrement l'appel réseau — la saisie manuelle continue de fonctionner.
 
 ## Backtest : ce que valent ces règles
 
@@ -254,6 +300,8 @@ volatrade plan --config config/config.example.json
 | `max_positions_par_theme` | 2 | Lignes maximum par thématique |
 | `jours_avant_resultats` | 3 | Séances avant publication déclenchant la vente |
 | `sortie_avant_resultats` | true | `false` = simple alerte, on traverse la publication |
+| `resultats_auto` | true | Compléter les dates manquantes via l'API Nasdaq |
+| `cache_resultats_heures` | 24 | Durée de vie du cache du calendrier |
 | `nombre_titres` | 10 | Taille de la sélection |
 | `volume_min` | 30000000 | Volume médian minimum, en devise par jour |
 | `prix_min` | 3.0 | Cours plancher |
@@ -272,6 +320,7 @@ Une clé inconnue ou une valeur hors bornes est refusée avec un message explici
 ```
 volatrade/
   data.py        téléchargement des cours, ajustement splits/dividendes, cache
+  earnings.py    dates de publication (Nasdaq) et projection trimestrielle
   universe.py    vivier de candidats et filtrage par volatilité/liquidité
   metrics.py     volatilité, VaR/CVaR, drawdowns, Sharpe/Sortino/Calmar, ATR, RSI
   signals.py     score d'achat en quatre blocs et garde-fous
@@ -292,7 +341,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-133 tests, aucun accès réseau : les cours sont synthétiques ou injectés, y compris
+159 tests, aucun accès réseau : les cours sont synthétiques ou injectés, y compris
 pour les tests de bout en bout de la ligne de commande. Ils couvrent notamment la
 calibration des mesures de risque sur des séries aux propriétés connues,
 l'application des filtres de sélection, les garde-fous du score, la primauté de la
@@ -306,9 +355,12 @@ look-ahead dans le backtest.
   vivier et les filtres de liquidité sont calibrés pour les États-Unis).
 - Données de fin de séance : les plans se lisent avant l'ouverture suivante, pas en
   intraday.
-- Aucune donnée fondamentale. Les dates de publication ne sont pas téléchargées :
-  c'est à vous de renseigner `date_resultats` par position, sans quoi la règle du
-  § 7 reste inerte.
+- Aucune donnée fondamentale au-delà du calendrier de publication, et celui-ci
+  ne couvre que les valeurs américaines : pour un titre coté ailleurs, il faut
+  renseigner `date_resultats` à la main.
+- Deux sources non documentées (Yahoo pour les cours, Nasdaq pour le calendrier),
+  donc deux points de rupture possibles. L'outil dégrade proprement : un
+  calendrier indisponible rend la règle du § 7 inerte, il ne fait rien échouer.
 - Les paramètres (2,5 ATR, +1,5 R / +3 R, 25 séances) sont des valeurs de bon sens
   vérifiées par backtest, pas des optima : les optimiser sur deux ans d'historique
   reviendrait surtout à mémoriser le passé.

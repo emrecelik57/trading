@@ -58,7 +58,7 @@ def faux_reseau(monkeypatch):
             }
         }
 
-    monkeypatch.setattr(data, "_http_get_json", faux_get)
+    monkeypatch.setattr(data, "http_get_json", faux_get)
 
 
 @pytest.fixture
@@ -70,6 +70,7 @@ def config_path(tmp_path):
         "univers": ["HAUT", "BAS", "PLAT"],
         "indice_reference": "SPY",
         "volume_min": 0,
+        "resultats_auto": False,
         "dossier_cache": str(tmp_path / "cache"),
     }))
     return chemin

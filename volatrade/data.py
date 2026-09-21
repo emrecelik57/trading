@@ -54,12 +54,13 @@ class Quote:
         return len(self.frame)
 
 
-def _cache_path(ticker: str, period: str, interval: str, cache_dir: Path) -> Path:
-    safe = ticker.replace("/", "_").replace("^", "idx_")
-    return cache_dir / f"{safe}__{period}__{interval}.json"
+def cache_path(cache_dir: Path | str, *parts: str) -> Path:
+    """Chemin du fichier de cache pour une cle composee de plusieurs morceaux."""
+    safe = [str(part).replace("/", "_").replace("^", "idx_") for part in parts]
+    return Path(cache_dir) / ("__".join(safe) + ".json")
 
 
-def _read_cache(path: Path, ttl: float) -> dict | None:
+def read_cache(path: Path, ttl: float) -> dict | None:
     if ttl <= 0 or not path.exists():
         return None
     if time.time() - path.stat().st_mtime > ttl:
@@ -70,7 +71,7 @@ def _read_cache(path: Path, ttl: float) -> dict | None:
         return None
 
 
-def _write_cache(path: Path, payload: dict) -> None:
+def write_cache(path: Path, payload: dict) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload))
@@ -78,7 +79,7 @@ def _write_cache(path: Path, payload: dict) -> None:
         pass  # un cache indisponible ne doit jamais faire echouer une analyse
 
 
-def _http_get_json(url: str, timeout: float, attempts: int = 3) -> dict:
+def http_get_json(url: str, timeout: float, attempts: int = 3) -> dict:
     last_error: Exception | None = None
     for attempt in range(attempts):
         request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
@@ -152,12 +153,12 @@ def fetch_history(
 ) -> Quote:
     """Telecharge (ou relit depuis le cache) l'historique d'un titre."""
     cache_dir = Path(cache_dir)
-    path = _cache_path(ticker, period, interval, cache_dir)
-    payload = _read_cache(path, cache_ttl)
+    path = cache_path(cache_dir, ticker, period, interval)
+    payload = read_cache(path, cache_ttl)
     if payload is None:
         url = f"{CHART_URL.format(ticker=urllib.parse.quote(ticker))}?range={period}&interval={interval}&events=div%2Csplit"
-        payload = _http_get_json(url, timeout=timeout)
-        _write_cache(path, payload)
+        payload = http_get_json(url, timeout=timeout)
+        write_cache(path, payload)
     return parse_chart_payload(ticker, payload)
 
 

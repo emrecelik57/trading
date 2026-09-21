@@ -81,7 +81,7 @@ def test_cache_evite_un_second_appel_reseau(tmp_path, monkeypatch):
         appels.append(url)
         return payload([10.0, 11.0, 12.0])
 
-    monkeypatch.setattr(data, "_http_get_json", faux_get)
+    monkeypatch.setattr(data, "http_get_json", faux_get)
     premier = data.fetch_history("TEST", cache_dir=tmp_path)
     second = data.fetch_history("TEST", cache_dir=tmp_path)
     assert len(appels) == 1
@@ -91,7 +91,7 @@ def test_cache_evite_un_second_appel_reseau(tmp_path, monkeypatch):
 def test_cache_expire_selon_le_ttl(tmp_path, monkeypatch):
     appels = []
     monkeypatch.setattr(
-        data, "_http_get_json", lambda url, timeout, attempts=3: (appels.append(url), payload([1.0, 2.0]))[1]
+        data, "http_get_json", lambda url, timeout, attempts=3: (appels.append(url), payload([1.0, 2.0]))[1]
     )
     data.fetch_history("TEST", cache_dir=tmp_path, cache_ttl=0)
     data.fetch_history("TEST", cache_dir=tmp_path, cache_ttl=0)
@@ -99,10 +99,10 @@ def test_cache_expire_selon_le_ttl(tmp_path, monkeypatch):
 
 
 def test_cache_corrompu_est_ignore(tmp_path, monkeypatch):
-    chemin = data._cache_path("TEST", "2y", "1d", tmp_path)
+    chemin = data.cache_path(tmp_path, "TEST", "2y", "1d")
     chemin.parent.mkdir(parents=True, exist_ok=True)
     chemin.write_text("{ceci n'est pas du json")
-    monkeypatch.setattr(data, "_http_get_json", lambda url, timeout, attempts=3: payload([5.0, 6.0]))
+    monkeypatch.setattr(data, "http_get_json", lambda url, timeout, attempts=3: payload([5.0, 6.0]))
     assert data.fetch_history("TEST", cache_dir=tmp_path).last_price == pytest.approx(6.0)
 
 
@@ -112,7 +112,7 @@ def test_fetch_many_ignore_les_tickers_en_echec(tmp_path, monkeypatch):
             raise DataError("indisponible")
         return payload([10.0, 11.0])
 
-    monkeypatch.setattr(data, "_http_get_json", faux_get)
+    monkeypatch.setattr(data, "http_get_json", faux_get)
     erreurs = []
     quotes = data.fetch_many(
         ["OK", "BOOM"], cache_dir=tmp_path, on_error=lambda ticker, exc: erreurs.append(ticker)

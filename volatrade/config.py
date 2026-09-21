@@ -30,6 +30,7 @@ class AppConfig:
     max_positions_par_theme: int = 2
     jours_avant_resultats: int = 3
     sortie_avant_resultats: bool = True
+    resultats_auto: bool = True           # completer les dates via l'API Nasdaq
 
     # Selection
     nombre_titres: int = 10
@@ -43,6 +44,7 @@ class AppConfig:
     historique: str = "2y"
     taux_sans_risque: float = 0.03
     cache_ttl_heures: float = 6.0
+    cache_resultats_heures: float = 24.0
     dossier_cache: str = ".volatrade_cache"
 
     def risk_settings(self) -> RiskSettings:
@@ -74,6 +76,8 @@ class AppConfig:
             raise ConfigError("multiple_atr_stop doit etre positif")
         if self.jours_avant_resultats < 0:
             raise ConfigError("jours_avant_resultats ne peut pas etre negatif")
+        if self.cache_resultats_heures < 0:
+            raise ConfigError("cache_resultats_heures ne peut pas etre negatif")
         if not self.univers:
             raise ConfigError("l'univers de depart est vide")
         return self

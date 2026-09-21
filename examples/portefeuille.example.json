@@ -8,7 +8,7 @@
     "target1": 790.0,
     "target2": 880.0,
     "trimmed": [],
-    "date_resultats": "2026-12-17"
+    "date_resultats": "2026-09-30"
   },
   {
     "ticker": "AMD",
@@ -17,8 +17,7 @@
     "entry_date": "2026-09-14",
     "stop_price": 482.55,
     "target1": 600.59,
-    "target2": 685.49,
-    "date_resultats": "2026-11-02"
+    "target2": 685.49
   },
   {
     "ticker": "RIOT",

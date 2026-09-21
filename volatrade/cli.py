@@ -11,6 +11,7 @@ from . import report
 from .backtest import run_backtest
 from .config import AppConfig, ConfigError, load_config
 from .data import DataError, fetch_history, fetch_many
+from .earnings import complete_positions, fetch_earnings_date
 from .engine import analyse, load_market, run
 from .metrics import compute_metrics, log_returns
 from .plan import build_plan
@@ -27,6 +28,7 @@ EPILOGUE = """exemples :
   volatrade suivi -p portefeuille.json         que faire des positions deja ouvertes
   volatrade backtest                           verifie les regles sur l'historique
   volatrade analyse TSLA NVDA                  fiche detaillee de titres precis
+  volatrade resultats AMD MU                   prochaines dates de publication
 """
 
 
@@ -106,6 +108,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     analyse_cmd = sub.add_parser("analyse", parents=[common], help="fiche detaillee de titres precis")
     analyse_cmd.add_argument("tickers", nargs="+", help="tickers a analyser")
+
+    resultats = sub.add_parser("resultats", parents=[common],
+                               help="prochaines dates de publication de titres")
+    resultats.add_argument("tickers", nargs="+", help="tickers a interroger")
     return parser
 
 
@@ -214,6 +220,17 @@ def cmd_suivi(args: argparse.Namespace, config: AppConfig) -> int:
         print("  Portefeuille vide.")
         return 0
 
+    if config.resultats_auto:
+        notices = complete_positions(
+            positions,
+            cache_dir=config.dossier_cache,
+            cache_ttl=config.cache_resultats_heures * 3600,
+        )
+        if notices:
+            print("\n  Dates de publication :")
+            for notice in notices:
+                print(f"    - {notice}")
+
     errors: list[tuple[str, str]] = []
     quotes = fetch_many(
         [position.ticker for position in positions],
@@ -298,6 +315,31 @@ def cmd_analyse(args: argparse.Namespace, config: AppConfig) -> int:
     return 0
 
 
+def cmd_resultats(args: argparse.Namespace, config: AppConfig) -> int:
+    """Interroge le calendrier de publication pour les tickers demandes."""
+    rows = []
+    for ticker in args.tickers:
+        found = fetch_earnings_date(
+            ticker,
+            cache_dir=config.dossier_cache,
+            cache_ttl=config.cache_resultats_heures * 3600,
+        )
+        rows.append([
+            ticker.upper(),
+            found.date if found else "introuvable",
+            found.source if found else "-",
+        ])
+    print(report.title("Prochaines publications de resultats"))
+    print(report.table(["Titre", "Date", "Source"], rows))
+    print("\n  Toutes ces dates sont des estimations : Nasdaq les derive de l'historique")
+    print("  de publication tant que l'entreprise n'a rien confirme. Une date saisie a la")
+    print("  main dans le portefeuille prime toujours sur celle-ci.")
+    _export(args.json_path, {"resultats": [
+        {"ticker": r[0], "date": r[1], "source": r[2]} for r in rows
+    ]})
+    return 0
+
+
 COMMANDS = {
     "selection": cmd_selection,
     "risque": cmd_risque,
@@ -305,6 +347,7 @@ COMMANDS = {
     "suivi": cmd_suivi,
     "backtest": cmd_backtest,
     "analyse": cmd_analyse,
+    "resultats": cmd_resultats,
 }
 
 
